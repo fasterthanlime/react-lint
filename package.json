@@ -1,0 +1,22 @@
+{
+  "name": "react-lint",
+  "version": "1.0.0",
+  "description": "Find performance anti-patterns in react-typescript files",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "author": "Amos Wenger <amoswenger@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fasterthanlime/react-lint.git"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "typescript": "^3.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^10.9.4"
+  }
+}
