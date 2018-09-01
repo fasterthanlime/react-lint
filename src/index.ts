@@ -1,12 +1,52 @@
 import * as ts from "typescript";
+import {isEmpty} from "underscore";
 
-function delint(sourceFile: ts.SourceFile) {
+function delint(checker: ts.TypeChecker, sourceFile: ts.SourceFile) {
   delintNode(sourceFile);
   function delintNode(node: ts.Node) {
     if (node.kind === ts.SyntaxKind.ClassDeclaration) {
-      report(node, `Found class declaration!`);
+      let cd = node as ts.ClassDeclaration;
+      if (extendsReactComponent(cd)) {
+        report(node, `Found react component!`);
+      }
+      debugger;
+    } else {
+      node.forEachChild(delintNode);
     }
-    node.forEachChild(delintNode);
+  }
+
+  function extendsReactComponent(cd: ts.ClassDeclaration): boolean {
+      if (isEmpty(cd.heritageClauses)) {
+        return false;
+      }
+
+      const hc = cd.heritageClauses[0];
+      if (isEmpty(hc.types)) {
+        return false;
+      }
+
+      const extendsType = hc.types[0].expression;
+      // we assume the component does `class Foo extends React.PureComponent`
+      // this won't work with `class Foo extends PureComponent`, etc. we don't
+      // resolve anything.
+      if (extendsType.kind !== ts.SyntaxKind.PropertyAccessExpression) {
+        return false;
+      }
+
+      let pa = extendsType as ts.PropertyAccessExpression;
+      const lhsExpr = pa.expression;
+      if (lhsExpr.kind !== ts.SyntaxKind.Identifier) {
+        return false;
+      }
+      const lhs = (lhsExpr as ts.Identifier).escapedText;
+      if (lhs !== "React") {
+        return false;
+      }
+      const rhs = pa.name.escapedText;
+      if (rhs === "PureComponent" || rhs === "Component") {
+        return true;
+      }
+      return false;
   }
 
   function report(node: ts.Node, message: string) {
@@ -46,6 +86,7 @@ function main() {
   options.skipLibCheck = true;
   options.skipDefaultLibCheck = true;
   const program = ts.createProgram([entryPoint], options)
+  const checker = program.getTypeChecker();
   const allSourceFiles = program.getSourceFiles();
 
   let projectSourceFiles: ts.SourceFile[] = [];
@@ -64,7 +105,7 @@ function main() {
   console.log(`Found ${projectSourceFiles.length} TSX files`);
 
   for (const sf of projectSourceFiles) {
-    delint(sf);
+    delint(checker, sf);
   }
 }
 
