@@ -1,20 +1,25 @@
 import * as ts from "typescript";
+import { relative } from "path";
 
-const reactAmbientRegexp = /node_modules[\\/]@types[\\/]react[\\/]index.d.ts$/;
 let ReactComponentSymbol: ts.Symbol;
+let numReports = 0;
 
 function delint(checker: ts.TypeChecker, sourceFile: ts.SourceFile) {
-  console.log(`======================================`);
-  console.log(`Linting ${sourceFile.fileName}`);
-  console.log(`======================================`);
   delintNode(sourceFile);
 
   function delintRender(node: ts.Node) {
-    if (ts.isJsxExpression(node)) {
-      report(node, `Found JSX expression!`);
-      let sym = checker.getSymbolAtLocation(node);
-      if (sym) {
-        report(node, `Symbol name: ${sym.getName()}`);
+    if (ts.isJsxOpeningLikeElement(node)) {
+      for (const prop of node.attributes.properties) {
+        if (ts.isJsxAttribute(prop)) {
+          const {initializer} = prop;
+          if (initializer) {
+            if (ts.isJsxExpression(initializer)) {
+              if (ts.isArrowFunction(initializer.expression)) {
+                report(initializer, `Anti-pattern <${node.tagName.getText(sourceFile)} ${prop.name.escapedText}={() => {}}/>`)
+              }
+            }
+          }
+        }
       }
     }
     node.forEachChild(delintRender);
@@ -22,15 +27,13 @@ function delint(checker: ts.TypeChecker, sourceFile: ts.SourceFile) {
 
   function delintNode(node: ts.Node) {
     if (ts.isClassDeclaration(node)) {
-      let cd = node as ts.ClassDeclaration;
-      if (extendsReactComponent(cd)) {
-        report(node, `Found react component!`);
-        for (const m of cd.members) {
+      if (extendsReactComponent(node)) {
+        for (const m of node.members) {
           if (ts.isMethodDeclaration(m)) {
-            let id = m.name as ts.Identifier;
-            if (id.escapedText === "render") {
-              report(id, "Got a render method over here")
-              delintRender(node);
+            if (ts.isIdentifier(m.name)) {
+              if (m.name.escapedText === "render") {
+                delintRender(node);
+              }
             }
           }
         }
@@ -41,7 +44,6 @@ function delint(checker: ts.TypeChecker, sourceFile: ts.SourceFile) {
   }
 
   function extendsReactComponent(cd: ts.ClassDeclaration): boolean {
-    console.log(`Visiting class ${cd.name ? cd.name.escapedText : "(anonymous)"}`);
     if (!cd.heritageClauses) {
       return false;
     }
@@ -51,16 +53,12 @@ function delint(checker: ts.TypeChecker, sourceFile: ts.SourceFile) {
         for (const hcTyp of hc.types) {
           let typ = checker.getTypeAtLocation(hcTyp.expression);
           let sym = typ.symbol;
-          // console.log(`Symbol's name is ${sym.escapedName} (id = ${(sym as any).id})`);
           if (typ.symbol === ReactComponentSymbol) {
-            console.log(`Hey that's React.Component!`);
             return true;
           } else {
-            console.log(`Trying to find decl, has ${sym.getDeclarations().length}`);
             let symDecl = sym.getDeclarations()[0];
             if (ts.isClassDeclaration(symDecl)) {
-              let pcd = symDecl as ts.ClassDeclaration;
-              if (extendsReactComponent(pcd)) {
+              if (extendsReactComponent(symDecl)) {
                 return true;
               }
             }
@@ -71,11 +69,14 @@ function delint(checker: ts.TypeChecker, sourceFile: ts.SourceFile) {
   }
 
   function report(node: ts.Node, message: string) {
+    numReports++;
     let { line, character } = sourceFile.getLineAndCharacterOfPosition(
       node.getStart(sourceFile)
     );
+    let fileName = sourceFile.fileName;
+    fileName = relative(ts.sys.getCurrentDirectory(), fileName);
     console.log(
-      `${sourceFile.fileName} (${line + 1},${character + 1}): ${message}`
+      `${fileName} (${line + 1},${character + 1}): ${message}`
     );
   }
 }
@@ -113,15 +114,18 @@ function main() {
   const allSourceFiles = program.getSourceFiles();
 
   let projectSourceFiles: ts.SourceFile[] = [];
+  const reactAmbientRegexp = /node_modules[\\/]@types[\\/]react[\\/]index.d.ts$/;
 
   for (const sf of allSourceFiles) {
     if (sf.isDeclarationFile && reactAmbientRegexp.test(sf.fileName)) {
       let reactModule = checker.getSymbolAtLocation(sf);
-      const exportAss = reactModule.exports.get(ts.createIdentifier("export=").escapedText).getDeclarations()[0] as ts.ExportAssignment;
-      const exportExpr = exportAss.expression;
-      const exportSym = checker.getSymbolAtLocation(exportExpr);
-      let ComponentSym = exportSym.exports.get(ts.createIdentifier("Component").escapedText)
-      ReactComponentSymbol = checker.getTypeAtLocation(ComponentSym.valueDeclaration).symbol;
+      const exportAss = reactModule.exports.get(ts.createIdentifier("export=").escapedText).getDeclarations()[0];
+      if (ts.isExportAssignment(exportAss)) {
+        const exportExpr = exportAss.expression;
+        const exportSym = checker.getSymbolAtLocation(exportExpr);
+        let ComponentSym = exportSym.exports.get(ts.createIdentifier("Component").escapedText)
+        ReactComponentSymbol = checker.getTypeAtLocation(ComponentSym.valueDeclaration).symbol;
+      }
     }
 
     if (sf.isDeclarationFile) {
@@ -137,12 +141,16 @@ function main() {
   if (!ReactComponentSymbol) {
     throw new Error(`Could not find type of 'React.Component'`);
   }
-  console.log(`React.Component's id is ${(ReactComponentSymbol as any).id}`);
 
-  console.log(`Found ${projectSourceFiles.length} TSX files`);
+  console.log(`Linting ${projectSourceFiles.length} TSX files...`);
 
   for (const sf of projectSourceFiles) {
     delint(checker, sf);
+  }
+  if (numReports > 0) {
+    console.log(`${numReports} problems reported`);
+  } else {
+    console.log(`All clear!`);
   }
 }
 
