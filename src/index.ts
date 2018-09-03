@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 import * as ts from "typescript";
-import { relative } from "path";
+import { relative, dirname } from "path";
+import * as meow from "meow";
+import * as logSymbols from "log-symbols";
 
 let ReactComponentSymbol: ts.Symbol;
 let numReports = 0;
@@ -77,7 +79,7 @@ function delint(checker: ts.TypeChecker, sourceFile: ts.SourceFile) {
     );
     let fileName = sourceFile.fileName;
     fileName = relative(ts.sys.getCurrentDirectory(), fileName);
-    console.log(
+    console.log(logSymbols.warning,
       `${fileName} (${line + 1},${character + 1}): ${message}`
     );
   }
@@ -92,25 +94,36 @@ const host: ts.ParseConfigFileHost = {
   onUnRecoverableConfigFileDiagnostic: reportDiagnostic
 };
 
+const cli = meow(`
+  Usage
+    $ react-lint <root-tsx-file>
+`)
+
 function main() {
-  const entryPoint = process.argv[2];
-  console.log(`Lint root is ${entryPoint}`);
+  if (cli.input.length !== 1) {
+    cli.showHelp();
+    process.exit(1);
+  }
+
+  const entryPoint = cli.input[0];
 
   const configPath = ts.findConfigFile(
-    /* searchPath */ "./",
+    dirname(entryPoint),
     ts.sys.fileExists,
     "tsconfig.json"
   );
   if (!configPath) {
     throw new Error("Could not find a valid 'tsconfig.json'.");
   }
-  console.log(`Using config file at ${configPath}`);
+  console.log(logSymbols.info, `Using config file at ${configPath}`);
   const parsedCommandLine = ts.getParsedCommandLineOfConfigFile(
     configPath,
     {},
     host
   );
   let options = parsedCommandLine.options;
+  console.log(logSymbols.info, `Parsing project...`);
+
   const program = ts.createProgram([entryPoint], options);
   const checker = program.getTypeChecker();
   const allSourceFiles = program.getSourceFiles();
@@ -144,16 +157,16 @@ function main() {
     throw new Error(`Could not find type of 'React.Component'`);
   }
 
-  console.log(`Linting ${projectSourceFiles.length} TSX files...`);
+  console.log(logSymbols.info, `Linting ${projectSourceFiles.length} TSX files...`);
 
   for (const sf of projectSourceFiles) {
     delint(checker, sf);
   }
   if (numReports > 0) {
-    console.log(`${numReports} problems reported`);
+    console.log(logSymbols.error, `${numReports} problems reported`);
     process.exit(1);
   } else {
-    console.log(`All clear!`);
+    console.log(logSymbols.success, `All clear!`);
   }
 }
 

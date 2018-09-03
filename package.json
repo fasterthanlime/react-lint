@@ -19,10 +19,14 @@
   },
   "license": "MIT",
   "dependencies": {
+    "log-symbols": "^2.2.0",
+    "meow": "^5.0.0",
     "typescript": "^3.0.3",
     "underscore": "^1.9.1"
   },
   "devDependencies": {
+    "@types/log-symbols": "^2.0.0",
+    "@types/meow": "^4.0.1",
     "@types/node": "^10.9.4",
     "@types/underscore": "^1.8.9"
   }
