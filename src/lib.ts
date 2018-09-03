@@ -34,11 +34,14 @@ export function initReactLint(modules: { typescript: typeof ts_module }) {
         }
 
         if (ts.isArrowFunction(initializer.expression)) {
-          const tagName = el.tagName.getText(sourceFile);
-          const propName = prop.name.escapedText;
           report(
             prop.name,
-            `Anti-pattern <${tagName} ${propName}={() => {}}/>`
+            `Avoid using an arrow function as a prop. This will re-render needlessly.`
+          );
+        } else if (ts.isArrayLiteralExpression(initializer.expression)) {
+          report(
+            prop.name,
+            `Avoid using an array literal as a prop. This will re-render needlessly.`
           );
         }
       }
