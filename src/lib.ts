@@ -4,37 +4,11 @@ type ReportDiagnostic = (diag: ts.Diagnostic) => void;
 
 const REACT_LINT_ERROR_CODE = 420000;
 
-const reactAmbientRegexp = /node_modules[\\/]@types[\\/]react[\\/]index.d.ts$/;
-
-function getReactComponentSymbol(program: ts.Program): ts.Symbol {
-  const checker = program.getTypeChecker();
-  const allSourceFiles = program.getSourceFiles();
-  for (const sf of allSourceFiles) {
-    if (sf.isDeclarationFile && reactAmbientRegexp.test(sf.fileName)) {
-      let reactModule = checker.getSymbolAtLocation(sf);
-      const exportAss = reactModule.exports
-        .get(ts.createIdentifier("export=").escapedText)
-        .getDeclarations()[0];
-      if (ts.isExportAssignment(exportAss)) {
-        const exportExpr = exportAss.expression;
-        const exportSym = checker.getSymbolAtLocation(exportExpr);
-        let ComponentSym = exportSym.exports.get(
-          ts.createIdentifier("Component").escapedText
-        );
-        return checker.getTypeAtLocation(ComponentSym.valueDeclaration).symbol;
-      }
-    }
-  }
-
-  throw new Error(`Could not find type of 'React.Component'`);
-}
-
 export function makeLinter(
   program: ts.Program,
   reportDiagnostic: ReportDiagnostic
 ) {
   const checker = program.getTypeChecker();
-  const ReactComponentSymbol = getReactComponentSymbol(program);
 
   return function lint(sourceFile: ts.SourceFile) {
     lintNode(sourceFile);
@@ -90,28 +64,35 @@ export function makeLinter(
       }
     }
 
-    function extendsReactComponent(cd: ts.ClassDeclaration): boolean {
-      if (!cd.heritageClauses) {
+    function extendsReactComponent(
+      typeDecl: ts.ClassDeclaration | ts.InterfaceDeclaration
+    ): boolean {
+      if (typeDecl.name.escapedText === "Component") {
+        return true;
+      }
+
+      if (!typeDecl.heritageClauses) {
         return false;
       }
 
-      for (const hc of cd.heritageClauses) {
+      for (const hc of typeDecl.heritageClauses) {
         if (hc.types)
           for (const hcTyp of hc.types) {
             let typ = checker.getTypeAtLocation(hcTyp.expression);
             let sym = typ.symbol;
-            if (typ.symbol === ReactComponentSymbol) {
-              return true;
-            } else {
-              let symDecl = sym.getDeclarations()[0];
-              if (ts.isClassDeclaration(symDecl)) {
-                if (extendsReactComponent(symDecl)) {
-                  return true;
-                }
+            let symDecl = sym.getDeclarations()[0];
+            if (
+              ts.isClassDeclaration(symDecl) ||
+              ts.isInterfaceDeclaration(symDecl)
+            ) {
+              if (extendsReactComponent(symDecl)) {
+                return true;
               }
             }
           }
       }
+
+      console.log(`${typeDecl.name.escapedText}: ran out of heritage clauses`);
       return false;
     }
 
