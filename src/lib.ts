@@ -52,7 +52,7 @@ export function makeLinter(
     function lintNode(node: ts.Node) {
       log(`Traversing node ${ts.SyntaxKind[node.kind]}`);
 
-      if (ts.isClassDeclaration(node)) {
+      if (ts.isClassLike(node)) {
         log(`Found class`);
         if (extendsReactComponent(node)) {
           log(`It does extend React.Component`);
@@ -73,9 +73,9 @@ export function makeLinter(
     }
 
     function extendsReactComponent(
-      typeDecl: ts.ClassDeclaration | ts.InterfaceDeclaration
+      typeDecl: ts.ClassLikeDeclarationBase | ts.InterfaceDeclaration
     ): boolean {
-      if (typeDecl.name.escapedText === "Component") {
+      if (typeDecl.name && typeDecl.name.escapedText === "Component") {
         return true;
       }
 
@@ -89,10 +89,7 @@ export function makeLinter(
             let typ = checker.getTypeAtLocation(hcTyp.expression);
             let sym = typ.symbol;
             let symDecl = sym.getDeclarations()[0];
-            if (
-              ts.isClassDeclaration(symDecl) ||
-              ts.isInterfaceDeclaration(symDecl)
-            ) {
+            if (ts.isClassLike(symDecl) || ts.isInterfaceDeclaration(symDecl)) {
               if (extendsReactComponent(symDecl)) {
                 return true;
               }
