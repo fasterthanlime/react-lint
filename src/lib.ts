@@ -4,9 +4,12 @@ type ReportDiagnostic = (diag: ts.Diagnostic) => void;
 
 const REACT_LINT_ERROR_CODE = 420000;
 
+type Log = (message: string) => void;
+
 export function makeLinter(
   program: ts.Program,
-  reportDiagnostic: ReportDiagnostic
+  reportDiagnostic: ReportDiagnostic,
+  log: Log
 ) {
   const checker = program.getTypeChecker();
 
@@ -47,12 +50,17 @@ export function makeLinter(
     }
 
     function lintNode(node: ts.Node) {
+      log(`Traversing node ${ts.SyntaxKind[node.kind]}`);
+
       if (ts.isClassDeclaration(node)) {
+        log(`Found class`);
         if (extendsReactComponent(node)) {
+          log(`It does extend React.Component`);
           for (const m of node.members) {
             if (ts.isMethodDeclaration(m)) {
               if (ts.isIdentifier(m.name)) {
                 if (m.name.escapedText === "render") {
+                  log(`Found render method`);
                   lintRender(node);
                 }
               }
@@ -91,8 +99,6 @@ export function makeLinter(
             }
           }
       }
-
-      console.log(`${typeDecl.name.escapedText}: ran out of heritage clauses`);
       return false;
     }
 

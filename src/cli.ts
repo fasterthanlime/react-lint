@@ -83,7 +83,13 @@ function main() {
       `${fileName} (${line + 1},${character + 1}): ${diag.messageText}`
     );
   }
-  const lint = makeLinter(program, reportDiagnostic);
+  let log = (msg: string) => {};
+  if (process.env.REACT_LINT_DEBUG === "1") {
+    log = (msg: string) => {
+      console.log(msg);
+    };
+  }
+  const lint = makeLinter(program, reportDiagnostic, log);
 
   for (const sourceFile of projectSourceFiles) {
     lint(sourceFile);
