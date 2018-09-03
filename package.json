@@ -2,8 +2,9 @@
   "name": "react-lint",
   "version": "1.0.0",
   "description": "Find performance anti-patterns in react-typescript files",
-  "main": "dist/index.js",
-  "bin": "./dist/index.js",
+  "main": "dist/lib.js",
+  "bin": "./dist/cli.js",
+  "types": "./dist/lib.d.ts",
   "files": [
     "dist/**"
   ],
