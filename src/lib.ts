@@ -53,17 +53,12 @@ export function initReactLint(modules: { typescript: typeof ts_module }) {
       }
 
       function lintNode(node: ts.Node) {
-        log(`Traversing node ${ts.SyntaxKind[node.kind]}`);
-
         if (ts.isClassLike(node)) {
-          log(`Found class`);
           if (extendsReactComponent(node)) {
-            log(`It does extend React.Component`);
             for (const m of node.members) {
               if (ts.isMethodDeclaration(m)) {
                 if (ts.isIdentifier(m.name)) {
                   if (m.name.escapedText === "render") {
-                    log(`Found render method`);
                     lintRender(node);
                   }
                 }
