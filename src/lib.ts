@@ -37,7 +37,7 @@ export function initReactLint(modules: { typescript: typeof ts_module }) {
           const tagName = el.tagName.getText(sourceFile);
           const propName = prop.name.escapedText;
           report(
-            initializer,
+            prop.name,
             `Anti-pattern <${tagName} ${propName}={() => {}}/>`
           );
         }
