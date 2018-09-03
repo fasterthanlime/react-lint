@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
-import * as ts from "typescript";
+import * as ts from "typescript/lib/tsserverlibrary";
 import * as meow from "meow";
 import * as logSymbols from "log-symbols";
 import { dirname, relative } from "path";
-import { makeLinter } from "./lib";
+import { initReactLint } from "./lib";
 
 function reportDiagnostic(diagnostic: ts.Diagnostic) {
   console.error(
@@ -89,7 +89,8 @@ function main() {
       console.log(msg);
     };
   }
-  const lint = makeLinter(program, reportDiagnostic, log);
+  const reactLint = initReactLint({ typescript: ts });
+  const lint = reactLint.makeLinter(program, reportDiagnostic, log);
 
   for (const sourceFile of projectSourceFiles) {
     lint(sourceFile);

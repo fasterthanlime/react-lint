@@ -1,118 +1,126 @@
-import * as ts from "typescript";
+import * as ts_module from "typescript/lib/tsserverlibrary";
 
-type ReportDiagnostic = (diag: ts.Diagnostic) => void;
+export function initReactLint(modules: { typescript: typeof ts_module }) {
+  const ts = modules.typescript;
 
-const REACT_LINT_ERROR_CODE = 420000;
+  type ReportDiagnostic = (diag: ts.Diagnostic) => void;
 
-type Log = (message: string) => void;
+  const REACT_LINT_ERROR_CODE = 420000;
 
-export function makeLinter(
-  program: ts.Program,
-  reportDiagnostic: ReportDiagnostic,
-  log: Log
-) {
-  const checker = program.getTypeChecker();
+  type Log = (message: string) => void;
 
-  return function lint(sourceFile: ts.SourceFile) {
-    lintNode(sourceFile);
+  function makeLinter(
+    program: ts.Program,
+    reportDiagnostic: ReportDiagnostic,
+    log: Log
+  ) {
+    const checker = program.getTypeChecker();
 
-    function lintProp(el: ts.JsxOpeningLikeElement, prop: ts.Node) {
-      if (!ts.isJsxAttribute(prop)) {
-        return;
-      }
+    return function lint(sourceFile: ts.SourceFile) {
+      lintNode(sourceFile);
 
-      const { initializer } = prop;
-      if (!initializer) {
-        return;
-      }
+      function lintProp(el: ts.JsxOpeningLikeElement, prop: ts.Node) {
+        if (!ts.isJsxAttribute(prop)) {
+          return;
+        }
 
-      if (!ts.isJsxExpression(initializer)) {
-        return;
-      }
+        const { initializer } = prop;
+        if (!initializer) {
+          return;
+        }
 
-      if (ts.isArrowFunction(initializer.expression)) {
-        const tagName = el.tagName.getText(sourceFile);
-        const propName = prop.name.escapedText;
-        report(
-          initializer,
-          `Anti-pattern <${tagName} ${propName}={() => {}}/>`
-        );
-      }
-    }
+        if (!ts.isJsxExpression(initializer)) {
+          return;
+        }
 
-    function lintRender(node: ts.Node) {
-      if (ts.isJsxOpeningLikeElement(node)) {
-        for (const prop of node.attributes.properties) {
-          lintProp(node, prop);
+        if (ts.isArrowFunction(initializer.expression)) {
+          const tagName = el.tagName.getText(sourceFile);
+          const propName = prop.name.escapedText;
+          report(
+            initializer,
+            `Anti-pattern <${tagName} ${propName}={() => {}}/>`
+          );
         }
       }
-      node.forEachChild(lintRender);
-    }
 
-    function lintNode(node: ts.Node) {
-      log(`Traversing node ${ts.SyntaxKind[node.kind]}`);
+      function lintRender(node: ts.Node) {
+        if (ts.isJsxOpeningLikeElement(node)) {
+          for (const prop of node.attributes.properties) {
+            lintProp(node, prop);
+          }
+        }
+        node.forEachChild(lintRender);
+      }
 
-      if (ts.isClassLike(node)) {
-        log(`Found class`);
-        if (extendsReactComponent(node)) {
-          log(`It does extend React.Component`);
-          for (const m of node.members) {
-            if (ts.isMethodDeclaration(m)) {
-              if (ts.isIdentifier(m.name)) {
-                if (m.name.escapedText === "render") {
-                  log(`Found render method`);
-                  lintRender(node);
+      function lintNode(node: ts.Node) {
+        log(`Traversing node ${ts.SyntaxKind[node.kind]}`);
+
+        if (ts.isClassLike(node)) {
+          log(`Found class`);
+          if (extendsReactComponent(node)) {
+            log(`It does extend React.Component`);
+            for (const m of node.members) {
+              if (ts.isMethodDeclaration(m)) {
+                if (ts.isIdentifier(m.name)) {
+                  if (m.name.escapedText === "render") {
+                    log(`Found render method`);
+                    lintRender(node);
+                  }
                 }
               }
             }
           }
+        } else {
+          node.forEachChild(lintNode);
         }
-      } else {
-        node.forEachChild(lintNode);
-      }
-    }
-
-    function extendsReactComponent(
-      typeDecl: ts.ClassLikeDeclarationBase | ts.InterfaceDeclaration
-    ): boolean {
-      if (typeDecl.name && typeDecl.name.escapedText === "Component") {
-        return true;
       }
 
-      if (!typeDecl.heritageClauses) {
+      function extendsReactComponent(
+        typeDecl: ts.ClassLikeDeclarationBase | ts.InterfaceDeclaration
+      ): boolean {
+        if (typeDecl.name && typeDecl.name.escapedText === "Component") {
+          return true;
+        }
+
+        if (!typeDecl.heritageClauses) {
+          return false;
+        }
+
+        for (const hc of typeDecl.heritageClauses) {
+          if (hc.types)
+            for (const hcTyp of hc.types) {
+              let typ = checker.getTypeAtLocation(hcTyp.expression);
+              let sym = typ.symbol;
+              let symDecl = sym.getDeclarations()[0];
+              if (
+                ts.isClassLike(symDecl) ||
+                ts.isInterfaceDeclaration(symDecl)
+              ) {
+                if (extendsReactComponent(symDecl)) {
+                  return true;
+                }
+              }
+            }
+        }
         return false;
       }
 
-      for (const hc of typeDecl.heritageClauses) {
-        if (hc.types)
-          for (const hcTyp of hc.types) {
-            let typ = checker.getTypeAtLocation(hcTyp.expression);
-            let sym = typ.symbol;
-            let symDecl = sym.getDeclarations()[0];
-            if (ts.isClassLike(symDecl) || ts.isInterfaceDeclaration(symDecl)) {
-              if (extendsReactComponent(symDecl)) {
-                return true;
-              }
-            }
-          }
+      function report(node: ts.Node, message: string) {
+        let start = node.getStart(sourceFile);
+        let end = node.getEnd();
+
+        let diag: ts.Diagnostic = {
+          file: sourceFile,
+          start: start,
+          length: end - start,
+          messageText: message,
+          category: ts.DiagnosticCategory.Warning,
+          source: "react-lint",
+          code: REACT_LINT_ERROR_CODE
+        };
+        reportDiagnostic(diag);
       }
-      return false;
-    }
-
-    function report(node: ts.Node, message: string) {
-      let start = node.getStart(sourceFile);
-      let end = node.getEnd();
-
-      let diag: ts.Diagnostic = {
-        file: sourceFile,
-        start: start,
-        length: end - start,
-        messageText: message,
-        category: ts.DiagnosticCategory.Warning,
-        source: "react-lint",
-        code: REACT_LINT_ERROR_CODE
-      };
-      reportDiagnostic(diag);
-    }
-  };
+    };
+  }
+  return { makeLinter };
 }
