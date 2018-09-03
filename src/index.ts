@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import * as ts from "typescript";
 import { relative } from "path";
 
@@ -149,6 +151,7 @@ function main() {
   }
   if (numReports > 0) {
     console.log(`${numReports} problems reported`);
+    process.exit(1);
   } else {
     console.log(`All clear!`);
   }

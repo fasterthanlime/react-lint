@@ -3,8 +3,13 @@
   "version": "1.0.0",
   "description": "Find performance anti-patterns in react-typescript files",
   "main": "dist/index.js",
+  "bin": "./dist/index.js",
+  "files": [
+    "dist/**"
+  ],
   "scripts": {
-    "build": "tsc",
+    "prepare": "npm run compile",
+    "compile": "tsc",
     "watch": "tsc --watch"
   },
   "author": "Amos Wenger <amoswenger@gmail.com>",
